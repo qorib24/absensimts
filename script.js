@@ -39,7 +39,7 @@ window.appData = {
 };
 
 let currentCrud = '';
-let unsubscribeCallbacks = [];
+// Removed unsubscribeCallbacks
 
 // Expose to global so inline event handlers work
 window.toggleSidebar = toggleSidebar;
@@ -57,6 +57,15 @@ window.promptResetSemester = promptResetSemester;
 
 // === INITIALIZATION ===
 document.addEventListener("DOMContentLoaded", () => {
+    // Hide splash screen after 1.5s
+    setTimeout(() => {
+        const splash = document.getElementById('splash-screen');
+        if (splash) {
+            splash.style.opacity = '0';
+            setTimeout(() => splash.remove(), 500); // Wait for transition
+        }
+    }, 1500);
+
     cekLoginStatus();
     loadPengaturan();
 
@@ -79,12 +88,19 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('abs-guru-hadir').addEventListener('change', toggleGuruPengganti);
     document.getElementById('abs-btn-hapus').addEventListener('click', hapusAbsensiHarian);
 
+    const fileImportSiswa = document.getElementById('file-import-siswa');
+    if (fileImportSiswa) {
+        document.getElementById('btn-import-siswa').addEventListener('click', () => fileImportSiswa.click());
+        document.getElementById('btn-import-siswa-mobile').addEventListener('click', () => fileImportSiswa.click());
+        fileImportSiswa.addEventListener('change', handleImportSiswa);
+    }
+
     // Load defaults for rekap
     const today = new Date();
     const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
     document.getElementById('rs-bulan').value = currentMonth;
     document.getElementById('rg-bulan').value = currentMonth;
-    document.getElementById('abs-tanggal').value = today.toISOString().split('T')[0];
+    document.getElementById('abs-tanggal').value = new Date(today.getTime() - today.getTimezoneOffset() * 60000).toISOString().split('T')[0];
 });
 
 // === AUTHENTICATION ===
@@ -179,9 +195,6 @@ async function logout() {
     localStorage.removeItem('absensiUser');
     window.currentUser = null;
     showPage('page-login');
-    // Unsubscribe from real-time updates to save memory
-    unsubscribeCallbacks.forEach(unsub => unsub());
-    unsubscribeCallbacks = [];
 }
 
 // === APP INITIALIZATION ===
@@ -193,7 +206,7 @@ function initApp() {
     document.getElementById("sidebar-role").innerText = window.currentUser.role.toUpperCase();
 
     renderMenu();
-    loadMasterData();
+    // Removed loadMasterData() since we now fetch on demand
 
     if (window.currentUser.role === 'admin') {
         navigate('admin-dashboard');
@@ -217,25 +230,11 @@ function loadPengaturan() {
     });
 }
 
-function loadMasterData() {
-    const refs = ['guru', 'siswa', 'kelas', 'mapel', 'jadwal'];
-    refs.forEach(key => {
-        const dRef = ref(db, key);
-        const unsub = onValue(dRef, (snapshot) => {
-            window.appData[key] = snapshot.exists() ? snapshot.val() : {};
-            
-            // Update dropdowns dynamically if we are on a page that needs them
-            populateDropdowns();
-            
-            // If currently viewing a CRUD page of this type, re-render
-            if (currentCrud === key) {
-                renderCrudTable(key);
-            }
-            if (key === 'jadwal' && currentCrud === 'jadwal') {
-                loadJadwal();
-            }
-        });
-        unsubscribeCallbacks.push(unsub);
+async function fetchMasterData(keys) {
+    const promises = keys.map(key => get(ref(db, key)));
+    const results = await Promise.all(promises);
+    results.forEach((snapshot, index) => {
+        window.appData[keys[index]] = snapshot.exists() ? snapshot.val() : {};
     });
 }
 
@@ -285,7 +284,7 @@ function createMenuItem(action, icon, text) {
     </a>`;
 }
 
-window.navigate = function(action) {
+window.navigate = async function(action) {
     if(window.innerWidth <= 768 && document.getElementById('sidebar').classList.contains('open')) {
         toggleSidebar();
     }
@@ -295,59 +294,85 @@ window.navigate = function(action) {
     if(activeItem) activeItem.classList.add('bg-teal-900', 'text-white');
 
     currentCrud = '';
+    showLoading();
 
-    if (action === 'admin-dashboard') {
-        document.getElementById('header-title').innerText = 'Dashboard Admin';
-        showPage('page-admin-dashboard');
-        loadAdminDashboard();
-    } 
-    else if (action.startsWith('crud-')) {
-        const type = action.replace('crud-', '');
-        currentCrud = type;
-        const titles = {siswa: 'Data Siswa', guru: 'Data Guru', kelas: 'Data Kelas', mapel: 'Data Pelajaran'};
-        document.getElementById('header-title').innerText = titles[type];
-        showPage('page-crud');
-        
-        document.getElementById('crud-search').value = '';
-        setupCrudFilter(type);
-        renderCrudTable(type);
+    try {
+        if (action === 'admin-dashboard') {
+            await fetchMasterData(['siswa', 'guru', 'kelas', 'mapel']);
+            document.getElementById('header-title').innerText = 'Dashboard Admin';
+            showPage('page-admin-dashboard');
+            await loadAdminDashboard();
+        } 
+        else if (action.startsWith('crud-')) {
+            const type = action.replace('crud-', '');
+            currentCrud = type;
+            const needed = [type];
+            if (type === 'siswa') needed.push('kelas');
+            await fetchMasterData(needed);
+
+            const titles = {siswa: 'Data Siswa', guru: 'Data Guru', kelas: 'Data Kelas', mapel: 'Data Pelajaran'};
+            document.getElementById('header-title').innerText = titles[type];
+            showPage('page-crud');
+            
+            if (type === 'siswa') {
+                document.getElementById('btn-import-siswa').classList.remove('hidden');
+                document.getElementById('btn-import-siswa-mobile').classList.remove('hidden');
+            } else {
+                document.getElementById('btn-import-siswa').classList.add('hidden');
+                document.getElementById('btn-import-siswa-mobile').classList.add('hidden');
+            }
+            
+            document.getElementById('crud-search').value = '';
+            setupCrudFilter(type);
+            renderCrudTable(type);
+        }
+        else if (action === 'jadwal') {
+            currentCrud = 'jadwal';
+            await fetchMasterData(['kelas', 'mapel', 'guru', 'jadwal']);
+            document.getElementById('header-title').innerText = 'Jadwal Pelajaran';
+            showPage('page-jadwal');
+            populateDropdowns();
+            loadJadwal();
+        }
+        else if (action === 'input-absensi') {
+            await fetchMasterData(['kelas', 'jadwal', 'mapel', 'guru', 'siswa']);
+            document.getElementById('header-title').innerText = 'Input Absensi';
+            showPage('page-input-absensi');
+            populateDropdowns();
+            document.getElementById('abs-info-area').classList.add('hidden');
+            document.getElementById('abs-siswa-area').classList.add('hidden');
+        }
+        else if (action === 'rekap-siswa') {
+            await fetchMasterData(['kelas', 'mapel', 'siswa']);
+            document.getElementById('header-title').innerText = 'Rekap Kehadiran Siswa';
+            showPage('page-rekap-siswa');
+            populateDropdowns();
+            document.getElementById('rs-body').innerHTML = '<tr><td colspan="7" class="text-center py-4 text-gray-500">Pilih filter dan klik Cari</td></tr>';
+        }
+        else if (action === 'rekap-guru') {
+            await fetchMasterData(['guru']);
+            document.getElementById('header-title').innerText = 'Rekap Guru & Gaji';
+            showPage('page-rekap-guru');
+            populateDropdowns();
+            document.getElementById('rg-body').innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">Pilih filter dan klik Cari</td></tr>';
+        }
+        else if (action === 'semester') {
+            document.getElementById('header-title').innerText = 'Manajemen Semester';
+            showPage('page-semester');
+            loadLogs();
+        }
+        else if (action === 'guru-dashboard') {
+            await fetchMasterData(['mapel', 'kelas', 'jadwal']);
+            document.getElementById('header-title').innerText = 'Dashboard Guru';
+            showPage('page-guru-dashboard');
+            await loadGuruDashboard();
+        }
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Error', 'Gagal memuat data dari server.', 'error');
     }
-    else if (action === 'jadwal') {
-        currentCrud = 'jadwal';
-        document.getElementById('header-title').innerText = 'Jadwal Pelajaran';
-        showPage('page-jadwal');
-        populateDropdowns();
-        loadJadwal();
-    }
-    else if (action === 'input-absensi') {
-        document.getElementById('header-title').innerText = 'Input Absensi';
-        showPage('page-input-absensi');
-        populateDropdowns();
-        document.getElementById('abs-info-area').classList.add('hidden');
-        document.getElementById('abs-siswa-area').classList.add('hidden');
-    }
-    else if (action === 'rekap-siswa') {
-        document.getElementById('header-title').innerText = 'Rekap Kehadiran Siswa';
-        showPage('page-rekap-siswa');
-        populateDropdowns();
-        document.getElementById('rs-body').innerHTML = '<tr><td colspan="7" class="text-center py-4 text-gray-500">Pilih filter dan klik Cari</td></tr>';
-    }
-    else if (action === 'rekap-guru') {
-        document.getElementById('header-title').innerText = 'Rekap Guru & Gaji';
-        showPage('page-rekap-guru');
-        populateDropdowns();
-        document.getElementById('rg-body').innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">Pilih filter dan klik Cari</td></tr>';
-    }
-    else if (action === 'semester') {
-        document.getElementById('header-title').innerText = 'Manajemen Semester';
-        showPage('page-semester');
-        loadLogs();
-    }
-    else if (action === 'guru-dashboard') {
-        document.getElementById('header-title').innerText = 'Dashboard Guru';
-        showPage('page-guru-dashboard');
-        loadGuruDashboard();
-    }
+
+    Swal.close();
 }
 
 // === UTILS ===
@@ -376,7 +401,8 @@ function generateId() {
 
 // === DASHBOARD ADMIN ===
 async function loadAdminDashboard() {
-    const today = new Date().toISOString().split('T')[0];
+    const _tAdmin = new Date();
+    const today = new Date(_tAdmin.getTime() - _tAdmin.getTimezoneOffset() * 60000).toISOString().split('T')[0];
     const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
     
     document.getElementById('dash-total-siswa').innerText = Object.keys(window.appData.siswa).length;
@@ -387,27 +413,31 @@ async function loadAdminDashboard() {
     // Hitung absensi hari ini
     const absRef = ref(db, `absensiHarian/${today}`);
     const snapshot = await get(absRef);
-    let hadir = 0, alfa = 0, gHadir = 0, gPengganti = 0;
+    let hadir = 0, alfa = 0;
+    let guruHadirSet = new Set();
+    let guruPenggantiSet = new Set();
     
     if (snapshot.exists()) {
         const data = snapshot.val();
         for (const kelas in data) {
             for (const slot in data[kelas]) {
                 const sesi = data[kelas][slot];
-                if (sesi.guruHadir) gHadir++;
-                if (sesi.guruPenggantiId) gPengganti++;
+                if (sesi.guruHadir && sesi.guruId) guruHadirSet.add(sesi.guruId);
+                if (sesi.guruPenggantiId) guruPenggantiSet.add(sesi.guruPenggantiId);
                 
-                for (const siswaId in sesi.siswa) {
-                    if (sesi.siswa[siswaId] === 'H') hadir++;
-                    if (sesi.siswa[siswaId] === 'A') alfa++;
+                if (sesi.siswa) {
+                    for (const siswaId in sesi.siswa) {
+                        if (sesi.siswa[siswaId] === 'H') hadir++;
+                        if (sesi.siswa[siswaId] === 'A') alfa++;
+                    }
                 }
             }
         }
     }
     document.getElementById('dash-siswa-hadir').innerText = hadir;
     document.getElementById('dash-siswa-alfa').innerText = alfa;
-    document.getElementById('dash-guru-mengajar').innerText = gHadir;
-    document.getElementById('dash-guru-pengganti').innerText = gPengganti;
+    document.getElementById('dash-guru-mengajar').innerText = guruHadirSet.size;
+    document.getElementById('dash-guru-pengganti').innerText = guruPenggantiSet.size;
 
     // Estimasi Gaji Bulan ini
     const rekapGuruRef = ref(db, `rekapGuruBulanan/${currentMonth}`);
@@ -435,7 +465,8 @@ async function loadGuruDashboard() {
     if(!guruId) return;
 
     const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-    const today = new Date().toISOString().split('T')[0];
+    const _tGuru = new Date();
+    const today = new Date(_tGuru.getTime() - _tGuru.getTimezoneOffset() * 60000).toISOString().split('T')[0];
     const hariIni = getDayName(today);
 
     // Load rekap bulanan
@@ -468,7 +499,7 @@ async function loadGuruDashboard() {
                     adaJadwal = true;
                     const mapelName = window.appData.mapel[item.mapelId]?.namaMapel || 'Unknown';
                     const kelasName = window.appData.kelas[kelasId]?.namaKelas || 'Unknown';
-                    const slotNames = {slot1: '07:00 - 09:00', slot2: '09:30 - 11:30', slot3: '12:30 - 14:00'};
+                    const slotNames = {slot1: 'Slot 1', slot2: 'Slot 2', slot3: 'Slot 3'};
                     
                     listHtml.innerHTML += `
                         <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
@@ -607,7 +638,15 @@ function openCrudModal(type, data = null) {
             ` : ''}
         `;
     } else if (type === 'kelas') {
-        html = `<input type="text" id="m-nama" placeholder="Nama Kelas (ex: VII A)" required class="w-full border rounded p-2" value="${data?data.namaKelas:''}">`;
+        html = `
+            <select id="m-tingkat" required class="w-full border rounded p-2 mb-2">
+                <option value="">Pilih Tingkat Kelas</option>
+                <option value="7" ${data&&data.tingkat==='7'?'selected':''}>Kelas 7</option>
+                <option value="8" ${data&&data.tingkat==='8'?'selected':''}>Kelas 8</option>
+                <option value="9" ${data&&data.tingkat==='9'?'selected':''}>Kelas 9</option>
+            </select>
+            <input type="text" id="m-nama" placeholder="Nama Rombel (ex: A, B, C)" required class="w-full border rounded p-2" value="${data&&data.rombel?data.rombel:data?data.namaKelas:''}">
+        `;
     } else if (type === 'mapel') {
         html = `<input type="text" id="m-nama" placeholder="Nama Pelajaran" required class="w-full border rounded p-2" value="${data?data.namaMapel:''}">`;
     }
@@ -636,6 +675,11 @@ window.deleteCrudData = function(type, id, nameDisplay) {
             try {
                 await remove(ref(db, `${type}/${id}`));
                 writeLog('Hapus ' + type, `Menghapus data ${type} dengan nama/ID: ${nameDisplay}`);
+                
+                await fetchMasterData([type]);
+                if (currentCrud === type) renderCrudTable(type);
+                if (type === 'kelas') populateDropdowns();
+                
                 Swal.fire('Terhapus!', 'Data berhasil dihapus.', 'success');
             } catch (e) {
                 Swal.fire('Error', e.message, 'error');
@@ -674,7 +718,9 @@ async function handleCrudSubmit(e) {
             payload.email = data.email;
         }
     } else if (type === 'kelas') {
-        payload = { namaKelas: document.getElementById('m-nama').value };
+        const tingkat = document.getElementById('m-tingkat').value;
+        const rombel = document.getElementById('m-nama').value;
+        payload = { tingkat: tingkat, rombel: rombel, namaKelas: `${tingkat} ${rombel}` };
     } else if (type === 'mapel') {
         payload = { namaMapel: document.getElementById('m-nama').value };
     }
@@ -697,6 +743,11 @@ async function handleCrudSubmit(e) {
         await set(ref(db, `${type}/${id}`), payload);
         writeLog(isEdit ? 'Edit ' + type : 'Tambah ' + type, `Menyimpan data ${type}: ${payload.nama || payload.namaKelas || payload.namaMapel}`);
         closeCrudModal();
+        
+        await fetchMasterData([type]);
+        if (currentCrud === type) renderCrudTable(type);
+        if (type === 'kelas') populateDropdowns();
+        
         Swal.fire({toast:true, position:'top-end', icon:'success', title:'Data tersimpan', showConfirmButton:false, timer:1500});
     } catch (error) {
         Swal.fire('Error', error.message, 'error');
@@ -734,7 +785,7 @@ function loadJadwal() {
     
     let html = '';
     const slots = ['slot1', 'slot2', 'slot3'];
-    const slotNames = ['Slot 1 (07:00-09:00)', 'Slot 2 (09:30-11:30)', 'Slot 3 (12:30-14:00)'];
+    const slotNames = ['Slot 1', 'Slot 2', 'Slot 3'];
     
     const mapelOpts = '<option value="">Kosong</option>' + Object.keys(window.appData.mapel).map(k => `<option value="${k}">${window.appData.mapel[k].namaMapel}</option>`).join('');
     const guruOpts = '<option value="">Pilih Guru</option>' + Object.keys(window.appData.guru).filter(k=>window.appData.guru[k].status==='aktif').map(k => `<option value="${k}">${window.appData.guru[k].nama}</option>`).join('');
@@ -778,6 +829,7 @@ window.simpanJadwal = async function(hari, kelasId) {
 
     try {
         await update(ref(db, `jadwal/${hari}/${kelasId}`), payload);
+        await fetchMasterData(['jadwal']);
         Swal.fire({toast:true, position:'top-end', icon:'success', title:'Jadwal tersimpan', showConfirmButton:false, timer:1500});
         writeLog('Edit Jadwal', `Mengubah jadwal hari ${hari} kelas ${window.appData.kelas[kelasId].namaKelas}`);
     } catch (e) {
@@ -1277,3 +1329,85 @@ function loadLogs() {
         document.getElementById('log-body').innerHTML = html;
     });
 }
+
+// === IMPORT EXCEL ===
+async function handleImportSiswa(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const excelData = XLSX.utils.sheet_to_json(firstSheet);
+            
+            if (excelData.length === 0) {
+                Swal.fire('Info', 'Data kosong atau format salah.', 'info');
+                return;
+            }
+
+            let successCount = 0;
+            let failCount = 0;
+            const updates = {};
+            
+            // Buat map kelas untuk pencarian ID kelas berdasarkan nama
+            const kelasMap = {};
+            for (let id in window.appData.kelas) {
+                kelasMap[window.appData.kelas[id].namaKelas.toLowerCase().trim()] = id;
+            }
+
+            excelData.forEach(row => {
+                if (row.NIS && row.Nama && row.Kelas) {
+                    const kelasName = String(row.Kelas).trim().toLowerCase();
+                    const kelasId = kelasMap[kelasName];
+                    
+                    if (kelasId) {
+                        const newId = 'siswa' + generateId();
+                        updates['siswa/' + newId] = {
+                            nis: String(row.NIS),
+                            nama: String(row.Nama),
+                            kelasId: kelasId,
+                            status: row.Status ? String(row.Status).toLowerCase() : 'aktif'
+                        };
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+                } else {
+                    failCount++;
+                }
+            });
+
+            if (Object.keys(updates).length > 0) {
+                // Since this is a module, we can just use the globally scoped update & ref 
+                // wait, update and ref are imported at the top of script.js, so they are available in this scope!
+                const { update, ref } = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js');
+                const { getDatabase } = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js');
+                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js');
+                
+                // Wait, update and ref are ALREADY imported at line 3! We can just use them!
+                // But this file is a module, so they are in scope.
+                
+                // Wait, db is also defined at the top. So we can just use `update(ref(db), updates)`
+                
+                await update(ref(db), updates);
+                await writeLog('import', `Import ${successCount} data siswa`);
+                
+                await fetchMasterData(['siswa']);
+                
+                Swal.fire('Berhasil', `Import sukses: ${successCount} siswa.<br>Gagal/Dilewati: ${failCount} baris (cek kolom atau Kelas tidak ditemukan).`, 'success');
+                renderCrudTable('siswa');
+            } else {
+                Swal.fire('Gagal', 'Tidak ada data valid untuk diimport. Pastikan kolom NIS, Nama, Kelas tersedia dan nama Kelas sama persis dengan sistem.', 'error');
+            }
+        } catch (err) {
+            console.error(err);
+            Swal.fire('Error', 'Gagal memproses file Excel.', 'error');
+        }
+    };
+    reader.readAsArrayBuffer(file);
+    document.getElementById('file-import-siswa').value = '';
+}
+
