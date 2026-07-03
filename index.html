@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Absensi MTs</title>
+    
+    <!-- PWA -->
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#0f766e">
+    <link rel="apple-touch-icon" href="./icon-192.png">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="./style.css">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        teal: {
+                            50: '#f0fdfa',
+                            100: '#ccfbf1',
+                            500: '#14b8a6',
+                            600: '#0d9488',
+                            700: '#0f766e',
+                            800: '#115e59',
+                            900: '#134e4a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <!-- jsPDF & AutoTable -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+    
+    <!-- SheetJS -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <!-- LOGIN PAGE -->
+    <div id="page-login" class="min-h-screen flex items-center justify-center fade-in">
+        <div class="glass-card p-8 rounded-xl shadow-lg w-full max-w-md mx-4">
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-teal-100 text-teal-700 mb-4">
+                    <i class="fas fa-school text-3xl"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-gray-800">Sistem Absensi MTs</h1>
+                <p class="text-sm text-gray-500 mt-1">Masuk ke akun Anda</p>
+            </div>
+            
+            <form id="form-login" class="space-y-5">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-user text-gray-400"></i>
+                        </div>
+                        <input type="text" id="login-username" required class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500" placeholder="admin@sekolah.com">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-lock text-gray-400"></i>
+                        </div>
+                        <input type="password" id="login-password" required class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500" placeholder="••••••••">
+                    </div>
+                </div>
+                <button type="submit" id="btn-login" class="w-full bg-teal-700 text-white py-2.5 rounded-lg font-medium hover:bg-teal-800 transition duration-150 flex justify-center items-center">
+                    <span>Masuk</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN APP WRAPPER -->
+    <div id="app-wrapper" class="hidden min-h-screen flex">
+        
+        <!-- SIDEBAR -->
+        <div id="sidebarOverlay" class="cursor-pointer" onclick="toggleSidebar()"></div>
+        <aside id="sidebar" class="bg-teal-800 text-white w-64 flex-shrink-0 shadow-xl overflow-y-auto z-50">
+            <div class="p-5 flex items-center space-x-3 border-b border-teal-700">
+                <i class="fas fa-school text-2xl"></i>
+                <span class="text-xl font-bold tracking-wide">Absensi MTs</span>
+            </div>
+            
+            <!-- User Info -->
+            <div class="p-5 border-b border-teal-700 bg-teal-900/50">
+                <p class="text-xs text-teal-200 uppercase tracking-wider mb-1" id="sidebar-role">Role</p>
+                <p class="font-medium truncate" id="sidebar-name">User Name</p>
+            </div>
+
+            <nav class="p-3 space-y-1" id="nav-menu">
+                <!-- Menu items injected by JS based on role -->
+            </nav>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+            <!-- HEADER -->
+            <header class="bg-white shadow-sm border-b border-gray-200 h-16 flex items-center justify-between px-4 lg:px-8 z-10">
+                <div class="flex items-center">
+                    <button onclick="toggleSidebar()" class="text-gray-500 hover:text-teal-700 focus:outline-none lg:hidden mr-4">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
+                    <h2 class="text-lg font-semibold text-gray-800" id="header-title">Dashboard</h2>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm font-medium text-gray-600 hidden sm:block" id="header-semester-info">TA: 2026/2027 | Sem 1</span>
+                    <button onclick="logout()" class="text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors" title="Logout">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- PAGES CONTAINER -->
+            <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 p-4 lg:p-8" id="main-content">
+                
+                <!-- Loading Spinner -->
+                <div id="global-loader" class="hidden flex justify-center items-center h-full">
+                    <i class="fas fa-spinner fa-spin text-4xl text-teal-700"></i>
+                </div>
+
+                <!-- Admin: Dashboard -->
+                <div id="page-admin-dashboard" class="page-content hidden fade-in space-y-6">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
+                            <div class="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xl"><i class="fas fa-user-graduate"></i></div>
+                            <div>
+                                <p class="text-sm text-gray-500">Total Siswa</p>
+                                <h3 class="text-xl font-bold" id="dash-total-siswa">0</h3>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
+                            <div class="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xl"><i class="fas fa-chalkboard-teacher"></i></div>
+                            <div>
+                                <p class="text-sm text-gray-500">Total Guru</p>
+                                <h3 class="text-xl font-bold" id="dash-total-guru">0</h3>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
+                            <div class="w-12 h-12 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xl"><i class="fas fa-users-class"></i></div>
+                            <div>
+                                <p class="text-sm text-gray-500">Total Kelas</p>
+                                <h3 class="text-xl font-bold" id="dash-total-kelas">0</h3>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
+                            <div class="w-12 h-12 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xl"><i class="fas fa-book"></i></div>
+                            <div>
+                                <p class="text-sm text-gray-500">Total Mapel</p>
+                                <h3 class="text-xl font-bold" id="dash-total-mapel">0</h3>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <h3 class="text-lg font-semibold mt-6 mb-2">Ringkasan Hari Ini</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-500">
+                            <p class="text-sm text-gray-500">Siswa Hadir</p>
+                            <h3 class="text-2xl font-bold text-gray-800" id="dash-siswa-hadir">0</h3>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-red-500">
+                            <p class="text-sm text-gray-500">Siswa Alfa</p>
+                            <h3 class="text-2xl font-bold text-gray-800" id="dash-siswa-alfa">0</h3>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-teal-500">
+                            <p class="text-sm text-gray-500">Guru Mengajar</p>
+                            <h3 class="text-2xl font-bold text-gray-800" id="dash-guru-mengajar">0</h3>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-yellow-500">
+                            <p class="text-sm text-gray-500">Guru Pengganti</p>
+                            <h3 class="text-2xl font-bold text-gray-800" id="dash-guru-pengganti">0</h3>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl shadow-sm mt-6">
+                        <h3 class="text-lg font-semibold mb-2">Estimasi Gaji Guru Bulan Ini</h3>
+                        <p class="text-3xl font-bold text-teal-700" id="dash-total-gaji">Rp 0</p>
+                    </div>
+                </div>
+
+                <!-- Admin: Data Master (Siswa, Guru, Kelas, Mapel, Jadwal) & Others will be generated via JS to keep HTML clean, or defined here -->
+                <div id="page-crud" class="page-content hidden fade-in space-y-4">
+                    <div class="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm">
+                        <div class="flex items-center space-x-2 w-full md:w-auto">
+                            <div class="relative w-full md:w-64">
+                                <input type="text" id="crud-search" placeholder="Cari..." class="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:ring-teal-500">
+                                <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
+                            </div>
+                            <select id="crud-filter" class="hidden border rounded-lg py-2 px-3 text-sm focus:ring-teal-500 bg-white"></select>
+                        </div>
+                        <button id="btn-add-crud" class="bg-teal-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-800 hidden md:block">
+                            <i class="fas fa-plus mr-2"></i>Tambah Data
+                        </button>
+                    </div>
+                    <!-- Mobile add button -->
+                    <button id="btn-add-crud-mobile" class="w-full bg-teal-700 text-white px-4 py-3 rounded-lg text-sm font-medium hover:bg-teal-800 md:hidden">
+                        <i class="fas fa-plus mr-2"></i>Tambah Data
+                    </button>
+
+                    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50" id="crud-table-head">
+                                    <!-- Dynamic Headers -->
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200" id="crud-table-body">
+                                    <!-- Dynamic Rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="crud-empty-state" class="hidden py-8 text-center text-gray-500">
+                            Tidak ada data.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Custom Page: Jadwal -->
+                <div id="page-jadwal" class="page-content hidden fade-in space-y-4">
+                    <div class="bg-white p-4 rounded-lg shadow-sm flex flex-col md:flex-row gap-4 items-center">
+                        <select id="jadwal-filter-hari" class="w-full md:w-auto border rounded-lg py-2 px-3 text-sm focus:ring-teal-500">
+                            <option value="senin">Senin</option>
+                            <option value="selasa">Selasa</option>
+                            <option value="rabu">Rabu</option>
+                            <option value="kamis">Kamis</option>
+                            <option value="jumat">Jumat</option>
+                            <option value="sabtu">Sabtu</option>
+                        </select>
+                        <select id="jadwal-filter-kelas" class="w-full md:w-auto border rounded-lg py-2 px-3 text-sm focus:ring-teal-500">
+                            <!-- Dynamic Class Options -->
+                        </select>
+                        <button onclick="loadJadwal()" class="w-full md:w-auto bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium">Tampilkan</button>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-sm p-4" id="jadwal-container">
+                        <!-- Dynamic Form for 3 Slots -->
+                    </div>
+                </div>
+
+                <!-- Custom Page: Input Absensi (Guru/Admin) -->
+                <div id="page-input-absensi" class="page-content hidden fade-in space-y-4">
+                    <div class="bg-white p-4 rounded-lg shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Tanggal</label>
+                            <input type="date" id="abs-tanggal" class="w-full border rounded-lg py-2 px-3 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Kelas</label>
+                            <select id="abs-kelas" class="w-full border rounded-lg py-2 px-3 text-sm"></select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Slot Pelajaran</label>
+                            <select id="abs-slot" class="w-full border rounded-lg py-2 px-3 text-sm">
+                                <option value="">Pilih Slot</option>
+                                <option value="slot1">Slot 1 (07:00 - 09:00)</option>
+                                <option value="slot2">Slot 2 (09:30 - 11:30)</option>
+                                <option value="slot3">Slot 3 (12:30 - 14:00)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Jadwal Info Area -->
+                    <div id="abs-info-area" class="hidden bg-teal-50 border border-teal-200 p-4 rounded-lg">
+                        <div class="flex justify-between items-center mb-3">
+                            <div>
+                                <p class="text-sm text-teal-800 font-semibold" id="abs-info-mapel">Pelajaran: -</p>
+                                <p class="text-xs text-teal-600" id="abs-info-guru">Guru Utama: -</p>
+                            </div>
+                            <span id="abs-status-badge" class="px-2 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700">Belum Diisi</span>
+                        </div>
+                        
+                        <div class="flex flex-col md:flex-row gap-4 items-center">
+                            <label class="flex items-center space-x-2 text-sm">
+                                <input type="checkbox" id="abs-guru-hadir" checked class="rounded text-teal-600 focus:ring-teal-500">
+                                <span>Guru Utama Hadir</span>
+                            </label>
+                            <div id="abs-pengganti-area" class="hidden w-full md:w-64">
+                                <select id="abs-guru-pengganti" class="w-full border rounded-lg py-1 px-2 text-sm text-gray-700">
+                                    <option value="">-- Pilih Guru Pengganti --</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Siswa List Area -->
+                    <div id="abs-siswa-area" class="hidden bg-white rounded-xl shadow-sm overflow-hidden">
+                        <div class="p-3 bg-gray-50 border-b flex justify-between items-center">
+                            <h3 class="font-medium text-gray-700">Daftar Siswa</h3>
+                            <button onclick="setAllHadir()" class="text-xs bg-teal-100 text-teal-700 px-2 py-1 rounded hover:bg-teal-200">Set Semua Hadir</button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nama Siswa</th>
+                                        <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Status Kehadiran</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="abs-siswa-list" class="bg-white divide-y divide-gray-200">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="p-4 bg-gray-50 border-t flex justify-end gap-2">
+                            <button id="abs-btn-hapus" class="hidden px-4 py-2 bg-red-100 text-red-700 text-sm font-medium rounded-lg hover:bg-red-200">Hapus Absensi</button>
+                            <button onclick="simpanAbsensi()" class="px-6 py-2 bg-teal-700 text-white text-sm font-medium rounded-lg hover:bg-teal-800">Simpan Absensi</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Page Rekap Siswa -->
+                <div id="page-rekap-siswa" class="page-content hidden fade-in space-y-4">
+                     <div class="bg-white p-4 rounded-lg shadow-sm grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Bulan</label>
+                            <input type="month" id="rs-bulan" class="w-full border rounded-lg py-2 px-3 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Kelas</label>
+                            <select id="rs-kelas" class="w-full border rounded-lg py-2 px-3 text-sm"></select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Pelajaran</label>
+                            <select id="rs-mapel" class="w-full border rounded-lg py-2 px-3 text-sm">
+                                <option value="all">Semua Pelajaran</option>
+                            </select>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="loadRekapSiswa()" class="flex-1 bg-teal-600 text-white py-2 rounded-lg text-sm">Cari</button>
+                            <button onclick="exportRekapSiswa('pdf')" class="bg-red-500 text-white px-3 py-2 rounded-lg text-sm" title="Export PDF"><i class="fas fa-file-pdf"></i></button>
+                            <button onclick="exportRekapSiswa('excel')" class="bg-green-600 text-white px-3 py-2 rounded-lg text-sm" title="Export Excel"><i class="fas fa-file-excel"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm overflow-hidden overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200" id="table-rekap-siswa">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Siswa</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kelas</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mapel</th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">H</th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">S</th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">I</th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">A</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rs-body" class="bg-white divide-y divide-gray-200 text-sm"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Page Rekap Guru & Gaji -->
+                <div id="page-rekap-guru" class="page-content hidden fade-in space-y-4">
+                    <div class="bg-white p-4 rounded-lg shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Bulan</label>
+                            <input type="month" id="rg-bulan" class="w-full border rounded-lg py-2 px-3 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Guru</label>
+                            <select id="rg-guru" class="w-full border rounded-lg py-2 px-3 text-sm">
+                                <option value="all">Semua Guru</option>
+                            </select>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="loadRekapGuru()" class="flex-1 bg-teal-600 text-white py-2 rounded-lg text-sm">Cari</button>
+                            <button onclick="exportRekapGuru('pdf')" class="bg-red-500 text-white px-3 py-2 rounded-lg text-sm" title="Export PDF"><i class="fas fa-file-pdf"></i></button>
+                            <button onclick="exportRekapGuru('excel')" class="bg-green-600 text-white px-3 py-2 rounded-lg text-sm" title="Export Excel"><i class="fas fa-file-excel"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm overflow-hidden overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200" id="table-rekap-guru">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Guru</th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Mengajar</th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Pengganti</th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Tdk Hadir</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Honor/Sesi</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Gaji</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rg-body" class="bg-white divide-y divide-gray-200 text-sm"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Page Manajemen Semester -->
+                <div id="page-semester" class="page-content hidden fade-in space-y-6">
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <h3 class="text-lg font-bold mb-4 text-gray-800 border-b pb-2">Pengaturan Semester Aktif</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Tahun Ajaran</label>
+                                <input type="text" id="sem-tahun" class="w-full border rounded-lg py-2 px-3 text-sm focus:ring-teal-500" placeholder="Contoh: 2026-2027">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Semester</label>
+                                <select id="sem-semester" class="w-full border rounded-lg py-2 px-3 text-sm focus:ring-teal-500">
+                                    <option value="semester1">Semester 1 (Ganjil)</option>
+                                    <option value="semester2">Semester 2 (Genap)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button onclick="simpanPengaturanSemester()" class="mt-4 bg-teal-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-800">Simpan Pengaturan</button>
+                    </div>
+
+                    <div class="bg-red-50 p-6 rounded-xl shadow-sm border border-red-200">
+                        <h3 class="text-lg font-bold mb-2 text-red-700">Zona Berbahaya (Reset Semester)</h3>
+                        <p class="text-sm text-gray-600 mb-4">Fitur ini akan mengarsipkan data absensi dan rekap semester aktif saat ini, lalu menghapusnya untuk memulai semester baru. Data master (Siswa, Guru, dll) tidak dihapus.</p>
+                        <button onclick="promptResetSemester()" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700">
+                            <i class="fas fa-exclamation-triangle mr-2"></i>Arsip & Reset Semester
+                        </button>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <h3 class="text-lg font-bold mb-4 text-gray-800 border-b pb-2">Log Aktivitas (10 Terakhir)</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                <tbody id="log-body" class="bg-white divide-y divide-gray-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Guru Dashboard -->
+                <div id="page-guru-dashboard" class="page-content hidden fade-in space-y-6">
+                    <div class="bg-teal-700 rounded-xl p-6 text-white shadow-lg relative overflow-hidden">
+                        <div class="relative z-10">
+                            <h2 class="text-2xl font-bold mb-1">Ahlan wa Sahlan, <span id="gdash-nama">Guru</span>!</h2>
+                            <p class="text-teal-100 text-sm">Semoga hari ini penuh berkah dalam mengajar.</p>
+                        </div>
+                        <i class="fas fa-mosque absolute -bottom-4 -right-4 text-8xl text-teal-800 opacity-50"></i>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+                            <p class="text-xs text-gray-500 uppercase font-semibold">Mengajar (Bulan Ini)</p>
+                            <h3 class="text-2xl font-bold text-teal-700 mt-2" id="gdash-sesi">0</h3>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+                            <p class="text-xs text-gray-500 uppercase font-semibold">Guru Pengganti</p>
+                            <h3 class="text-2xl font-bold text-blue-600 mt-2" id="gdash-pengganti">0</h3>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+                            <p class="text-xs text-gray-500 uppercase font-semibold">Tidak Hadir</p>
+                            <h3 class="text-2xl font-bold text-red-500 mt-2" id="gdash-absen">0</h3>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+                            <p class="text-xs text-gray-500 uppercase font-semibold">Estimasi Honor</p>
+                            <h3 class="text-xl font-bold text-green-600 mt-2" id="gdash-honor">Rp 0</h3>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <h3 class="text-lg font-bold mb-4 text-gray-800 border-b pb-2">Jadwal Mengajar Hari Ini</h3>
+                        <div id="gdash-jadwal-list" class="space-y-3">
+                            <!-- Dynamic list -->
+                        </div>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+    </div>
+
+    <!-- Generic Modal for CRUD -->
+    <div id="crud-modal" class="hidden fixed inset-0 z-[60] overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="closeCrudModal()"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div class="inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full">
+                <form id="crud-form">
+                    <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div class="sm:flex sm:items-start">
+                            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                                <h3 class="text-lg leading-6 font-medium text-gray-900" id="crud-modal-title">Tambah Data</h3>
+                                <div class="mt-4 space-y-4" id="crud-modal-body">
+                                    <!-- Dynamic Inputs injected by JS -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 px-4 py-3 sm:px-6 flex flex-row-reverse">
+                        <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-teal-600 text-base font-medium text-white hover:bg-teal-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">
+                            Simpan
+                        </button>
+                        <button type="button" onclick="closeCrudModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                            Batal
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script -->
+    <script type="module" src="./script.js"></script>
+    <script>
+        // PWA Registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').then(reg => {
+                    console.log('SW registered!', reg);
+                }).catch(err => console.log('SW registration failed', err));
+            });
+        }
+    </script>
+</body>
+</html>
