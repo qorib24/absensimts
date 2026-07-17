@@ -35,7 +35,8 @@ window.appData = {
     siswa: {},
     kelas: {},
     mapel: {},
-    jadwal: {}
+    jadwal: {},
+    staf: {}
 };
 
 let currentCrud = '';
@@ -117,7 +118,7 @@ function cekLoginStatus() {
 async function handleLogin(e) {
     e.preventDefault();
     const btn = document.getElementById("btn-login");
-    const uname = document.getElementById("login-username").value;
+    const uname = document.getElementById("login-username").value.trim().toLowerCase();
     const pass = document.getElementById("login-password").value;
 
     if (!uname || !pass) return alert("Email dan Password wajib diisi!");
@@ -156,13 +157,14 @@ async function handleLogin(e) {
         if (snapshot.exists()) {
             const gurus = snapshot.val();
             for (const key in gurus) {
-                if (gurus[key].email === user.email) {
+                if (gurus[key].email && gurus[key].email.toLowerCase() === user.email) {
                     loggedIn = true;
                     userData = {
                         uid: key,
                         guruId: key,
                         nama: gurus[key].nama,
                         role: 'guru',
+                        tipe: gurus[key].tipe || 'tetap',
                         email: gurus[key].email
                     };
                     uid = key;
@@ -171,6 +173,30 @@ async function handleLogin(e) {
             }
         }
 
+        
+        if (!loggedIn) {
+            const stafRef = ref(db, 'staf');
+            const sSnap = await get(stafRef);
+            if (sSnap.exists()) {
+                const stafs = sSnap.val();
+                for (const key in stafs) {
+                    if (stafs[key].email && stafs[key].email.toLowerCase() === user.email) {
+                        loggedIn = true;
+                        const r = (stafs[key].jabatan || '').toLowerCase().includes('admin') ? 'admin' : 'staf';
+                        userData = {
+                            uid: key,
+                            stafId: key,
+                            nama: stafs[key].nama,
+                            role: r,
+                            jabatan: stafs[key].jabatan,
+                            email: stafs[key].email
+                        };
+                        uid = key;
+                        break;
+                    }
+                }
+            }
+        }
         if (loggedIn) {
             userData.uid = uid;
             window.currentUser = userData;
@@ -210,6 +236,8 @@ function initApp() {
 
     if (window.currentUser.role === 'admin') {
         navigate('admin-dashboard');
+    } else if (window.currentUser.role === 'staf') {
+        navigate('absensi-staf');
     } else {
         navigate('guru-dashboard');
     }
@@ -263,15 +291,24 @@ function renderMenu() {
         html += createMenuItem('crud-guru', 'fa-chalkboard-teacher', 'Data Guru');
         html += createMenuItem('crud-kelas', 'fa-users-class', 'Data Kelas');
         html += createMenuItem('crud-mapel', 'fa-book', 'Data Pelajaran');
+        html += createMenuItem('crud-staf', 'fa-user-tie', 'Data Staf');
         html += createMenuItem('jadwal', 'fa-calendar-alt', 'Jadwal Pelajaran');
         html += '<p class="px-3 mt-4 mb-2 text-xs font-semibold text-teal-300 uppercase">Akademik & Laporan</p>';
         html += createMenuItem('input-absensi', 'fa-check-square', 'Absensi Siswa');
         html += createMenuItem('rekap-siswa', 'fa-chart-bar', 'Rekap Siswa');
         html += createMenuItem('rekap-guru', 'fa-file-invoice-dollar', 'Rekap Guru & Gaji');
+        html += createMenuItem('rekap-staf', 'fa-file-invoice-dollar', 'Rekap Staf & Gaji');
+        html += createMenuItem('absensi-staf', 'fa-fingerprint', 'Absensi Kehadiran Saya');
         html += createMenuItem('semester', 'fa-cogs', 'Manajemen Semester');
+    } else if (role === 'staf') {
+        html += createMenuItem('absensi-staf', 'fa-fingerprint', 'Absensi Kehadiran Saya');
     } else if (role === 'guru') {
         html += createMenuItem('guru-dashboard', 'fa-home', 'Dashboard Guru');
-        html += createMenuItem('input-absensi', 'fa-check-square', 'Isi Absensi');
+        if (window.currentUser.tipe === 'pengganti') { 
+            html += createMenuItem('klaim-kelas', 'fa-hand-paper', 'Ambil Kelas Pengganti'); 
+        } else {
+            html += createMenuItem('input-absensi', 'fa-check-square', 'Isi Absensi');
+        }
         // Fitur Riwayat/Rekap Guru bisa ditambahkan di sini jika perlu
     }
 
@@ -310,7 +347,7 @@ window.navigate = async function(action) {
             if (type === 'siswa') needed.push('kelas');
             await fetchMasterData(needed);
 
-            const titles = {siswa: 'Data Siswa', guru: 'Data Guru', kelas: 'Data Kelas', mapel: 'Data Pelajaran'};
+            const titles = {siswa: 'Data Siswa', guru: 'Data Guru', kelas: 'Data Kelas', mapel: 'Data Pelajaran', staf: 'Data Staf'};
             document.getElementById('header-title').innerText = titles[type];
             showPage('page-crud');
             
@@ -348,6 +385,23 @@ window.navigate = async function(action) {
             showPage('page-rekap-siswa');
             populateDropdowns();
             document.getElementById('rs-body').innerHTML = '<tr><td colspan="7" class="text-center py-4 text-gray-500">Pilih filter dan klik Cari</td></tr>';
+        }
+        else if (action === 'rekap-staf') {
+            await fetchMasterData(['staf']);
+            document.getElementById('header-title').innerText = 'Rekap Staf & Gaji';
+            showPage('page-rekap-staf');
+            document.getElementById('rstaf-body').innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">Pilih filter dan klik Cari</td></tr>';
+        }
+        else if (action === 'absensi-staf') {
+            document.getElementById('header-title').innerText = 'Absensi Kehadiran';
+            showPage('page-absensi-staf');
+            if (typeof checkAbsenStafHariIni === 'function') await checkAbsenStafHariIni();
+        }
+        else if (action === 'klaim-kelas') {
+            await fetchMasterData(['kelas', 'mapel', 'jadwal']);
+            document.getElementById('header-title').innerText = 'Ambil Kelas Pengganti';
+            showPage('page-klaim-kelas');
+            if (typeof populateDropdownsKlaim === 'function') populateDropdownsKlaim();
         }
         else if (action === 'rekap-guru') {
             await fetchMasterData(['guru']);
@@ -455,6 +509,12 @@ async function loadAdminDashboard() {
 // === DASHBOARD GURU ===
 function getDayName(dateString) {
     const days = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+    if (!dateString) return '';
+    const parts = dateString.split('-');
+    if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        return days[d.getDay()];
+    }
     const d = new Date(dateString);
     return days[d.getDay()];
 }
@@ -572,6 +632,7 @@ function renderCrudTable(type, searchQuery = '', filterValue = 'all') {
     if (type === 'siswa') headers = '<th>NIS</th><th>Nama</th><th>Kelas</th><th>Status</th>';
     else if (type === 'guru') headers = '<th>Nama Guru</th><th>No HP</th><th>Honor/Sesi</th><th>Status</th>';
     else if (type === 'kelas') headers = '<th>Nama Kelas</th>';
+    else if (type === 'staf') headers = '<th>Nama Staf</th><th>Jabatan</th><th>Honor/Hari</th><th>Status</th>';
     else if (type === 'mapel') headers = '<th>Nama Pelajaran</th>';
     
     headers = `<tr>${headers.split('<th>').filter(x=>x).map(x => `<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${x}`).join('')}<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th></tr>`;
@@ -590,6 +651,9 @@ function renderCrudTable(type, searchQuery = '', filterValue = 'all') {
             cols = `<td>${item.nama}</td><td>${item.noHp || '-'}</td><td>Rp ${item.honorPerSesi}</td><td><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}">${item.status}</span></td>`;
         } else if (type === 'kelas') {
             cols = `<td>${item.namaKelas}</td>`;
+        } else if (type === 'staf') {
+            const statusColor = item.status === 'aktif' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+            cols = `<td>${item.nama}</td><td>${item.jabatan}</td><td>Rp ${item.honorHarian}</td><td><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}">${item.status}</span></td>`;
         } else if (type === 'mapel') {
             cols = `<td>${item.namaMapel}</td>`;
         }
@@ -626,6 +690,7 @@ function openCrudModal(type, data = null) {
     } else if (type === 'guru') {
         html = `
             <input type="text" id="m-nama" placeholder="Nama Guru" required class="w-full border rounded p-2 mb-2" value="${data?data.nama:''}">
+            <select id="m-tipe" class="w-full border rounded p-2 mb-2"><option value="tetap" ${data&&data.tipe==='tetap'?'selected':''}>Guru Tetap</option><option value="pengganti" ${data&&data.tipe==='pengganti'?'selected':''}>Guru Pengganti</option></select>
             <input type="text" id="m-nohp" placeholder="No HP" class="w-full border rounded p-2 mb-2" value="${data?data.noHp||'':''}">
             <input type="number" id="m-honor" placeholder="Honor Per Sesi" required class="w-full border rounded p-2 mb-2" value="${data?data.honorPerSesi:25000}">
             <select id="m-status" class="w-full border rounded p-2 mb-2"><option value="aktif" ${data&&data.status==='aktif'?'selected':''}>Aktif</option><option value="nonaktif" ${data&&data.status==='nonaktif'?'selected':''}>Non-Aktif</option></select>
@@ -633,6 +698,20 @@ function openCrudModal(type, data = null) {
                 <div class="mt-4 pt-4 border-t border-gray-200">
                     <p class="text-sm font-medium text-gray-700 mb-2">Akun Login Guru</p>
                     <input type="email" id="m-email" placeholder="Email Guru" required class="w-full border rounded p-2 mb-2">
+                    <input type="password" id="m-password" placeholder="Password" required class="w-full border rounded p-2 mb-2">
+                </div>
+            ` : ''}
+        `;
+    } else if (type === 'staf') {
+        html = `
+            <input type="text" id="m-nama" placeholder="Nama Staf" required class="w-full border rounded p-2 mb-2" value="${data?data.nama:''}">
+            <input type="text" id="m-jabatan" placeholder="Jabatan (ex: Kepala Sekolah, TU)" required class="w-full border rounded p-2 mb-2" value="${data?data.jabatan:''}">
+            <input type="number" id="m-honor" placeholder="Honor Harian" required class="w-full border rounded p-2 mb-2" value="${data?data.honorHarian:50000}">
+            <select id="m-status" class="w-full border rounded p-2 mb-2"><option value="aktif" ${data&&data.status==='aktif'?'selected':''}>Aktif</option><option value="nonaktif" ${data&&data.status==='nonaktif'?'selected':''}>Non-Aktif</option></select>
+            ${!data ? `
+                <div class="mt-4 pt-4 border-t border-gray-200">
+                    <p class="text-sm font-medium text-gray-700 mb-2">Akun Login Staf</p>
+                    <input type="email" id="m-email" placeholder="Email Staf" required class="w-full border rounded p-2 mb-2">
                     <input type="password" id="m-password" placeholder="Password" required class="w-full border rounded p-2 mb-2">
                 </div>
             ` : ''}
@@ -696,7 +775,7 @@ async function handleCrudSubmit(e) {
     e.preventDefault();
     const type = currentCrud;
     const isEdit = !!editDataId;
-    const id = isEdit ? editDataId : (type==='kelas'?'kelas'+generateId():type==='mapel'?'mapel'+generateId():type==='siswa'?'siswa'+generateId():'guru'+generateId());
+    const id = isEdit ? editDataId : (type==='kelas'?'kelas'+generateId():type==='mapel'?'mapel'+generateId():type==='siswa'?'siswa'+generateId():type==='staf'?'staf'+generateId():'guru'+generateId());
     
     let payload = {};
     if (type === 'siswa') {
@@ -710,11 +789,23 @@ async function handleCrudSubmit(e) {
         payload = {
             nama: document.getElementById('m-nama').value,
             noHp: document.getElementById('m-nohp').value,
+            tipe: document.getElementById('m-tipe').value,
             honorPerSesi: parseInt(document.getElementById('m-honor').value),
             status: document.getElementById('m-status').value
         };
         if (isEdit) {
             const data = window.appData['guru'][id];
+            payload.email = data.email;
+        }
+    } else if (type === 'staf') {
+        payload = {
+            nama: document.getElementById('m-nama').value,
+            jabatan: document.getElementById('m-jabatan').value,
+            honorHarian: parseInt(document.getElementById('m-honor').value),
+            status: document.getElementById('m-status').value
+        };
+        if (isEdit) {
+            const data = window.appData['staf'][id];
             payload.email = data.email;
         }
     } else if (type === 'kelas') {
@@ -726,7 +817,7 @@ async function handleCrudSubmit(e) {
     }
 
     try {
-        if (type === 'guru' && !isEdit) {
+        if ((type === 'guru' || type === 'staf') && !isEdit) {
             // Register Firebase Auth User first
             const gEmail = document.getElementById('m-email').value;
             const gPass = document.getElementById('m-password').value;
@@ -773,12 +864,18 @@ function populateDropdowns() {
 
 function loadJadwal() {
     const hari = document.getElementById('jadwal-filter-hari').value;
-    const kelasId = document.getElementById('jadwal-filter-kelas').value;
+    let kelasId = document.getElementById('jadwal-filter-kelas').value;
     const container = document.getElementById('jadwal-container');
     
     if(!kelasId) {
-        container.innerHTML = '<p class="text-center text-gray-500 py-4">Pilih kelas terlebih dahulu</p>';
-        return;
+        const select = document.getElementById('jadwal-filter-kelas');
+        if (select.options.length > 1) {
+            select.selectedIndex = 1;
+            kelasId = select.value;
+        } else {
+            container.innerHTML = '<p class="text-center text-gray-500 py-4">Pilih kelas terlebih dahulu</p>';
+            return;
+        }
     }
 
     const jData = (window.appData.jadwal[hari] && window.appData.jadwal[hari][kelasId]) || {};
@@ -868,8 +965,8 @@ async function checkJadwalAbsensi() {
     const mapel = window.appData.mapel[jadwalSlot.mapelId]?.namaMapel || '-';
     const guru = window.appData.guru[jadwalSlot.guruId]?.nama || '-';
     
-    // Auth Check for Guru: only allow their own classes unless admin
-    if (window.currentUser.role === 'guru' && jadwalSlot.guruId !== window.currentUser.guruId) {
+    // Auth Check for Guru: only allow their own classes unless admin or pengganti
+    if (window.currentUser.role === 'guru' && window.currentUser.tipe !== 'pengganti' && jadwalSlot.guruId !== window.currentUser.guruId) {
         Swal.fire('Akses Ditolak', 'Anda bukan guru pengajar utama untuk mata pelajaran ini di jadwal tersebut.', 'error');
         return;
     }
@@ -1131,10 +1228,13 @@ async function loadRekapSiswa() {
         // Prepare list for sorting
         let list = [];
         for (const sId in data) {
+            const siswaObj = window.appData.siswa[sId];
+            if (!siswaObj) continue; // Lewati siswa yang sudah dihapus/tidak ada
+
             for (const mId in data[sId]) {
                 if (mapelId === 'all' || mapelId === mId) {
                     list.push({
-                        nama: window.appData.siswa[sId]?.nama || 'Unknown',
+                        nama: siswaObj.nama,
                         kelas: window.appData.kelas[kelasId]?.namaKelas || '-',
                         mapel: window.appData.mapel[mId]?.namaMapel || '-',
                         rekap: data[sId][mId]
@@ -1411,3 +1511,155 @@ async function handleImportSiswa(e) {
     document.getElementById('file-import-siswa').value = '';
 }
 
+
+
+// === ABSENSI STAF ===
+async function checkAbsenStafHariIni() {
+    const t = new Date();
+    const today = new Date(t.getTime() - t.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+    const bulan = today.substring(0, 7);
+    const stafId = window.currentUser.stafId || window.currentUser.uid;
+    const sRef = ref(db, `absensiStaf/${bulan}/${stafId}/${today}`);
+    
+    const snap = await get(sRef);
+    const btn = document.getElementById('btn-absen-staf');
+    const statusDiv = document.getElementById('staf-absensi-status');
+    
+    if (snap.exists()) {
+        btn.disabled = true;
+        btn.className = "bg-gray-400 text-white font-bold py-4 px-8 rounded-full shadow-md cursor-not-allowed";
+        btn.innerHTML = '<i class="fas fa-check-circle mr-2 text-xl"></i> SUDAH ABSEN';
+        statusDiv.innerHTML = '<p class="text-green-600 font-bold bg-green-100 py-2 px-4 rounded-lg inline-block">Anda sudah mencatat kehadiran hari ini.</p>';
+    } else {
+        btn.disabled = false;
+        btn.className = "bg-teal-600 hover:bg-teal-700 text-white font-bold py-4 px-8 rounded-full shadow-lg transform transition hover:scale-105";
+        btn.innerHTML = '<i class="fas fa-fingerprint mr-2 text-xl"></i> HADIR HARI INI';
+        statusDiv.innerHTML = '';
+    }
+}
+
+window.absenStafHadir = async function() {
+    try {
+        showLoading();
+        const t = new Date();
+        const today = new Date(t.getTime() - t.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+        const bulan = today.substring(0, 7);
+        const stafId = window.currentUser.stafId || window.currentUser.uid;
+        
+        const payload = {
+            hadir: true,
+            waktu: Date.now()
+        };
+        
+        await set(ref(db, `absensiStaf/${bulan}/${stafId}/${today}`), payload);
+        writeLog('Absen Staf', `Staf ${window.currentUser.nama} absen hadir hari ini`);
+        
+        Swal.fire({icon: 'success', title: 'Berhasil', text: 'Kehadiran Anda berhasil dicatat!', showConfirmButton: false, timer: 1500});
+        checkAbsenStafHariIni();
+    } catch (e) {
+        Swal.fire('Error', e.message, 'error');
+    }
+}
+
+window.loadRekapStaf = async function() {
+    const bulan = document.getElementById('rstaf-bulan').value;
+    const tbody = document.getElementById('rstaf-body');
+
+    if(!bulan) return Swal.fire('Info', 'Bulan wajib diisi', 'info');
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</td></tr>';
+
+    const snap = await get(ref(db, `absensiStaf/${bulan}`));
+    let html = '';
+    
+    if(snap.exists()) {
+        const data = snap.val();
+        // data structure: { stafId: { tanggal: {hadir:true, waktu:123} } }
+        
+        for (const sId in window.appData.staf) {
+            const stafInfo = window.appData.staf[sId];
+            if (stafInfo.status !== 'aktif') continue;
+            
+            const hariHadir = data[sId] ? Object.keys(data[sId]).length : 0;
+            const honorHari = stafInfo.honorHarian || 0;
+            const totalGaji = hariHadir * honorHari;
+            
+            html += `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2">${stafInfo.nama}</td>
+                    <td class="px-4 py-2">${stafInfo.jabatan}</td>
+                    <td class="px-4 py-2 text-center text-green-600 font-bold">${hariHadir}</td>
+                    <td class="px-4 py-2 text-right">Rp ${honorHari.toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-2 text-right font-bold text-teal-700">Rp ${totalGaji.toLocaleString('id-ID')}</td>
+                </tr>
+            `;
+        }
+    }
+    
+    if(!html) html = '<tr><td colspan="5" class="text-center py-4 text-gray-500">Tidak ada data rekap ditemukan.</td></tr>';
+    tbody.innerHTML = html;
+}
+
+window.exportRekapStaf = function(type) {
+    if(type === 'excel') {
+        const wb = XLSX.utils.table_to_book(document.getElementById('table-rekap-staf'), {sheet:"Rekap Staf"});
+        XLSX.writeFile(wb, `Rekap_Gaji_Staf_${document.getElementById('rstaf-bulan').value}.xlsx`);
+    }
+}
+
+// === GURU PENGGANTI KLAIM KELAS ===
+window.populateDropdownsKlaim = function() {
+    const kOpts = '<option value="">Pilih Kelas</option>' + Object.keys(window.appData.kelas).map(k => `<option value="${k}">${window.appData.kelas[k].namaKelas}</option>`).join('');
+    if(document.getElementById('klaim-kelas-select')) document.getElementById('klaim-kelas-select').innerHTML = kOpts;
+}
+
+window.klaimKelas = function() {
+    navigate('klaim-kelas');
+}
+
+window.lanjutKlaimKelas = async function() {
+    const tanggal = document.getElementById('klaim-tanggal').value;
+    const kelasId = document.getElementById('klaim-kelas-select').value;
+    const slot = document.getElementById('klaim-slot').value;
+    
+    if(!tanggal || !kelasId || !slot) return Swal.fire('Info', 'Lengkapi semua isian', 'info');
+    
+    const hari = getDayName(tanggal);
+    const jadwalSlot = window.appData.jadwal[hari]?.[kelasId]?.[slot];
+    
+    if (!jadwalSlot) {
+        return Swal.fire('Error', 'Tidak ada jadwal pelajaran di kelas ini pada slot yang Anda pilih.', 'error');
+    }
+    
+    // Check if original teacher is already absent or if it's already filled
+    const absRef = ref(db, `absensiHarian/${tanggal}/${kelasId}/${slot}`);
+    const snap = await get(absRef);
+    if(snap.exists()) {
+        const d = snap.val();
+        if(d.guruHadir) {
+            return Swal.fire('Error', 'Guru utama sudah tercatat hadir untuk kelas ini!', 'error');
+        }
+        if(d.guruPenggantiId && d.guruPenggantiId !== window.currentUser.guruId) {
+            return Swal.fire('Error', 'Kelas ini sudah diklaim oleh guru pengganti lain!', 'error');
+        }
+    }
+    
+    // Redirect to input absensi but prefill things
+    navigate('input-absensi');
+    
+    setTimeout(() => {
+        document.getElementById('abs-tanggal').value = tanggal;
+        document.getElementById('abs-kelas').value = kelasId;
+        document.getElementById('abs-slot').value = slot;
+        checkJadwalAbsensi().then(() => {
+            // Force set as Pengganti
+            setTimeout(() => {
+                const cbHadir = document.getElementById('abs-guru-hadir');
+                if(cbHadir) {
+                    cbHadir.checked = false;
+                    toggleGuruPengganti();
+                    document.getElementById('abs-guru-pengganti').value = window.currentUser.guruId;
+                }
+            }, 500);
+        });
+    }, 500);
+}

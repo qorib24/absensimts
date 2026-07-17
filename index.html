@@ -256,7 +256,7 @@
                 <!-- Custom Page: Jadwal -->
                 <div id="page-jadwal" class="page-content hidden fade-in space-y-4">
                     <div class="bg-white p-4 rounded-lg shadow-sm flex flex-col md:flex-row gap-4 items-center">
-                        <select id="jadwal-filter-hari" class="w-full md:w-auto border rounded-lg py-2 px-3 text-sm focus:ring-teal-500">
+                        <select id="jadwal-filter-hari" onchange="loadJadwal()" class="w-full md:w-auto border rounded-lg py-2 px-3 text-sm focus:ring-teal-500">
                             <option value="senin">Senin</option>
                             <option value="selasa">Selasa</option>
                             <option value="rabu">Rabu</option>
@@ -264,10 +264,9 @@
                             <option value="jumat">Jumat</option>
                             <option value="sabtu">Sabtu</option>
                         </select>
-                        <select id="jadwal-filter-kelas" class="w-full md:w-auto border rounded-lg py-2 px-3 text-sm focus:ring-teal-500">
+                        <select id="jadwal-filter-kelas" onchange="loadJadwal()" class="w-full md:w-auto border rounded-lg py-2 px-3 text-sm focus:ring-teal-500">
                             <!-- Dynamic Class Options -->
                         </select>
-                        <button onclick="loadJadwal()" class="w-full md:w-auto bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium">Tampilkan</button>
                     </div>
 
                     <div class="bg-white rounded-xl shadow-sm p-4" id="jadwal-container">
@@ -423,6 +422,76 @@
                     </div>
                 </div>
 
+                <!-- Page Absensi Staf -->
+                <div id="page-absensi-staf" class="page-content hidden fade-in space-y-6">
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 text-center">
+                        <h3 class="text-xl font-bold mb-2 text-gray-800">Absensi Kehadiran Harian</h3>
+                        <p class="text-gray-500 mb-6">Silakan klik tombol di bawah ini untuk mencatat kehadiran Anda hari ini.</p>
+                        <div id="staf-absensi-status" class="mb-4"></div>
+                        <button onclick="absenStafHadir()" id="btn-absen-staf" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-4 px-8 rounded-full shadow-lg transform transition hover:scale-105">
+                            <i class="fas fa-fingerprint mr-2 text-xl"></i> HADIR HARI INI
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Page Rekap Staf -->
+                <div id="page-rekap-staf" class="page-content hidden fade-in space-y-4">
+                    <div class="bg-white p-4 rounded-lg shadow-sm grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Bulan</label>
+                            <input type="month" id="rstaf-bulan" class="w-full border rounded-lg py-2 px-3 text-sm">
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="loadRekapStaf()" class="flex-1 bg-teal-600 text-white py-2 rounded-lg text-sm">Cari</button>
+                            <button onclick="exportRekapStaf('excel')" class="bg-green-600 text-white px-3 py-2 rounded-lg text-sm" title="Export Excel"><i class="fas fa-file-excel"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm overflow-hidden overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200" id="table-rekap-staf">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Staf</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jabatan</th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Jml Hadir</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Honor/Hari</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Gaji</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rstaf-body" class="bg-white divide-y divide-gray-200 text-sm"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Page Ambil Kelas Pengganti -->
+                <div id="page-klaim-kelas" class="page-content hidden fade-in space-y-4">
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 max-w-md mx-auto">
+                        <h3 class="text-lg font-bold mb-4 text-gray-800 border-b pb-2">Ambil Kelas (Guru Pengganti)</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Tanggal Menggantikan</label>
+                                <input type="date" id="klaim-tanggal" class="w-full border rounded-lg py-2 px-3 text-sm focus:ring-teal-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Pilih Kelas</label>
+                                <select id="klaim-kelas-select" class="w-full border rounded-lg py-2 px-3 text-sm focus:ring-teal-500">
+                                    <!-- Dynamic -->
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Pilih Slot Jam</label>
+                                <select id="klaim-slot" class="w-full border rounded-lg py-2 px-3 text-sm focus:ring-teal-500">
+                                    <option value="slot1">Slot 1 (07:00 - 09:00)</option>
+                                    <option value="slot2">Slot 2 (09:30 - 11:30)</option>
+                                    <option value="slot3">Slot 3 (12:00 - 14:00)</option>
+                                </select>
+                            </div>
+                            <button onclick="lanjutKlaimKelas()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-lg shadow-md transition-colors mt-4">
+                                Lanjut Isi Absensi Siswa <i class="fas fa-arrow-right ml-2"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Page Manajemen Semester -->
                 <div id="page-semester" class="page-content hidden fade-in space-y-6">
                     <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -533,12 +602,12 @@
     </div>
 
     <!-- Script -->
-    <script type="module" src="./script.js"></script>
+    <script type="module" src="./script.js?v=2"></script>
     <script>
         // PWA Registration
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js').then(reg => {
+                navigator.serviceWorker.register('./sw.js?v=2').then(reg => {
                     console.log('SW registered!', reg);
                 }).catch(err => console.log('SW registration failed', err));
             });
