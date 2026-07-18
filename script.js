@@ -56,6 +56,14 @@ window.exportRekapGuru = exportRekapGuru;
 window.simpanPengaturanSemester = simpanPengaturanSemester;
 window.promptResetSemester = promptResetSemester;
 
+// Export newly added global functions for inline event handlers
+window.checkAbsensiHarianTU = checkAbsensiHarianTU;
+window.setAllHadirTU = setAllHadirTU;
+window.simpanAbsensiHarianTU = simpanAbsensiHarianTU;
+window.hapusAbsensiHarianTU = hapusAbsensiHarianTU;
+window.loadLaporanYayasan = loadLaporanYayasan;
+window.exportLaporanYayasan = exportLaporanYayasan;
+
 // === INITIALIZATION ===
 document.addEventListener("DOMContentLoaded", () => {
     // Hide splash screen after 1.5s
@@ -88,6 +96,13 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('abs-slot').addEventListener('change', checkJadwalAbsensi);
     document.getElementById('abs-guru-hadir').addEventListener('change', toggleGuruPengganti);
     document.getElementById('abs-btn-hapus').addEventListener('click', hapusAbsensiHarian);
+
+    // Setup TU Absensi Listeners
+    if (document.getElementById('ah-tanggal')) {
+        document.getElementById('ah-tanggal').addEventListener('change', checkAbsensiHarianTU);
+        document.getElementById('ah-kelas').addEventListener('change', checkAbsensiHarianTU);
+        document.getElementById('ah-btn-hapus').addEventListener('click', hapusAbsensiHarianTU);
+    }
 
     const fileImportSiswa = document.getElementById('file-import-siswa');
     if (fileImportSiswa) {
@@ -291,17 +306,17 @@ function renderMenu() {
         html += createMenuItem('crud-guru', 'fa-chalkboard-teacher', 'Data Guru');
         html += createMenuItem('crud-kelas', 'fa-users-class', 'Data Kelas');
         html += createMenuItem('crud-mapel', 'fa-book', 'Data Pelajaran');
-        html += createMenuItem('crud-staf', 'fa-user-tie', 'Data Staf');
+        html += createMenuItem('crud-staf', 'fa-user-tie', 'Data TU');
         html += createMenuItem('jadwal', 'fa-calendar-alt', 'Jadwal Pelajaran');
         html += '<p class="px-3 mt-4 mb-2 text-xs font-semibold text-teal-300 uppercase">Akademik & Laporan</p>';
-        html += createMenuItem('input-absensi', 'fa-check-square', 'Absensi Siswa');
-        html += createMenuItem('rekap-siswa', 'fa-chart-bar', 'Rekap Siswa');
-        html += createMenuItem('rekap-guru', 'fa-file-invoice-dollar', 'Rekap Guru & Gaji');
-        html += createMenuItem('rekap-staf', 'fa-file-invoice-dollar', 'Rekap Staf & Gaji');
-        html += createMenuItem('absensi-staf', 'fa-fingerprint', 'Absensi Kehadiran Saya');
+        html += createMenuItem('input-absensi', 'fa-check-square', 'Absensi Siswa (Mapel)');
+        html += createMenuItem('rekap-siswa', 'fa-chart-bar', 'Rekap Siswa (Mapel)');
+        html += createMenuItem('rekap-guru', 'fa-file-invoice-dollar', 'Rekap Honor & Gaji');
+        html += createMenuItem('input-absensi-harian', 'fa-clipboard-list', 'Absen Harian TU');
+        html += createMenuItem('laporan-yayasan', 'fa-file-alt', 'Laporan Yayasan');
         html += createMenuItem('semester', 'fa-cogs', 'Manajemen Semester');
     } else if (role === 'staf') {
-        html += createMenuItem('absensi-staf', 'fa-fingerprint', 'Absensi Kehadiran Saya');
+        html += createMenuItem('input-absensi-harian', 'fa-clipboard-list', 'Absen Harian TU');
     } else if (role === 'guru') {
         html += createMenuItem('guru-dashboard', 'fa-home', 'Dashboard Guru');
         if (window.currentUser.tipe === 'pengganti') { 
@@ -347,7 +362,7 @@ window.navigate = async function(action) {
             if (type === 'siswa') needed.push('kelas');
             await fetchMasterData(needed);
 
-            const titles = {siswa: 'Data Siswa', guru: 'Data Guru', kelas: 'Data Kelas', mapel: 'Data Pelajaran', staf: 'Data Staf'};
+            const titles = {siswa: 'Data Siswa', guru: 'Data Guru', kelas: 'Data Kelas', mapel: 'Data Pelajaran', staf: 'Data Akun TU'};
             document.getElementById('header-title').innerText = titles[type];
             showPage('page-crud');
             
@@ -386,16 +401,25 @@ window.navigate = async function(action) {
             populateDropdowns();
             document.getElementById('rs-body').innerHTML = '<tr><td colspan="7" class="text-center py-4 text-gray-500">Pilih filter dan klik Cari</td></tr>';
         }
-        else if (action === 'rekap-staf') {
-            await fetchMasterData(['staf']);
-            document.getElementById('header-title').innerText = 'Rekap Staf & Gaji';
-            showPage('page-rekap-staf');
-            document.getElementById('rstaf-body').innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">Pilih filter dan klik Cari</td></tr>';
+        else if (action === 'rekap-guru') {
+            await fetchMasterData(['guru', 'staf']);
+            document.getElementById('header-title').innerText = 'Rekap Honor & Gaji Karyawan';
+            showPage('page-rekap-guru');
+            populateDropdowns();
+            document.getElementById('rg-body').innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">Pilih filter dan klik Cari</td></tr>';
+            document.getElementById('rtu-body').innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-500">Pilih filter dan klik Cari</td></tr>';
         }
-        else if (action === 'absensi-staf') {
-            document.getElementById('header-title').innerText = 'Absensi Kehadiran';
-            showPage('page-absensi-staf');
-            if (typeof checkAbsenStafHariIni === 'function') await checkAbsenStafHariIni();
+        else if (action === 'input-absensi-harian') {
+            await fetchMasterData(['kelas', 'siswa']);
+            document.getElementById('header-title').innerText = 'Input Absensi Harian (TU)';
+            showPage('page-input-absensi-harian');
+            populateDropdowns();
+            document.getElementById('ah-siswa-area').classList.add('hidden');
+        }
+        else if (action === 'laporan-yayasan') {
+            await fetchMasterData(['kelas', 'siswa']);
+            document.getElementById('header-title').innerText = 'Laporan Yayasan';
+            showPage('page-laporan-yayasan');
         }
         else if (action === 'klaim-kelas') {
             await fetchMasterData(['kelas', 'mapel', 'jadwal']);
@@ -630,9 +654,9 @@ function renderCrudTable(type, searchQuery = '', filterValue = 'all') {
     // Headers
     let headers = '';
     if (type === 'siswa') headers = '<th>NIS</th><th>Nama</th><th>Kelas</th><th>Status</th>';
-    else if (type === 'guru') headers = '<th>Nama Guru</th><th>No HP</th><th>Honor/Sesi</th><th>Status</th>';
+    else if (type === 'guru') headers = '<th>Nama Guru</th><th>No HP</th><th>Akun Login</th><th>Honor/Sesi</th><th>Status</th>';
     else if (type === 'kelas') headers = '<th>Nama Kelas</th>';
-    else if (type === 'staf') headers = '<th>Nama Staf</th><th>Jabatan</th><th>Honor/Hari</th><th>Status</th>';
+    else if (type === 'staf') headers = '<th>Nama TU</th><th>Akun Login</th><th>Honor/Hari</th><th>Status</th>';
     else if (type === 'mapel') headers = '<th>Nama Pelajaran</th>';
     
     headers = `<tr>${headers.split('<th>').filter(x=>x).map(x => `<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${x}`).join('')}<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th></tr>`;
@@ -648,12 +672,14 @@ function renderCrudTable(type, searchQuery = '', filterValue = 'all') {
             cols = `<td>${item.nis}</td><td>${item.nama}</td><td>${className}</td><td><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}">${item.status}</span></td>`;
         } else if (type === 'guru') {
             const statusColor = item.status === 'aktif' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
-            cols = `<td>${item.nama}</td><td>${item.noHp || '-'}</td><td>Rp ${item.honorPerSesi}</td><td><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}">${item.status}</span></td>`;
+            const akunInfo = item.email ? `<div class="text-xs">Email: <span class="font-mono text-teal-600">${item.email}</span><br>Pass: <span class="font-mono">${item.password||'***'}</span></div>` : '-';
+            cols = `<td>${item.nama}</td><td>${item.noHp || '-'}</td><td>${akunInfo}</td><td>Rp ${item.honorPerSesi}</td><td><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}">${item.status}</span></td>`;
         } else if (type === 'kelas') {
             cols = `<td>${item.namaKelas}</td>`;
         } else if (type === 'staf') {
             const statusColor = item.status === 'aktif' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
-            cols = `<td>${item.nama}</td><td>${item.jabatan}</td><td>Rp ${item.honorHarian}</td><td><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}">${item.status}</span></td>`;
+            const akunInfo = item.email ? `<div class="text-xs">Email: <span class="font-mono text-teal-600">${item.email}</span><br>Pass: <span class="font-mono">${item.password||'***'}</span></div>` : '-';
+            cols = `<td>${item.nama}</td><td>${akunInfo}</td><td>Rp ${item.honorHarian}</td><td><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}">${item.status}</span></td>`;
         } else if (type === 'mapel') {
             cols = `<td>${item.namaMapel}</td>`;
         }
@@ -704,14 +730,13 @@ function openCrudModal(type, data = null) {
         `;
     } else if (type === 'staf') {
         html = `
-            <input type="text" id="m-nama" placeholder="Nama Staf" required class="w-full border rounded p-2 mb-2" value="${data?data.nama:''}">
-            <input type="text" id="m-jabatan" placeholder="Jabatan (ex: Kepala Sekolah, TU)" required class="w-full border rounded p-2 mb-2" value="${data?data.jabatan:''}">
+            <input type="text" id="m-nama" placeholder="Nama TU" required class="w-full border rounded p-2 mb-2" value="${data?data.nama:''}">
             <input type="number" id="m-honor" placeholder="Honor Harian" required class="w-full border rounded p-2 mb-2" value="${data?data.honorHarian:50000}">
             <select id="m-status" class="w-full border rounded p-2 mb-2"><option value="aktif" ${data&&data.status==='aktif'?'selected':''}>Aktif</option><option value="nonaktif" ${data&&data.status==='nonaktif'?'selected':''}>Non-Aktif</option></select>
             ${!data ? `
                 <div class="mt-4 pt-4 border-t border-gray-200">
-                    <p class="text-sm font-medium text-gray-700 mb-2">Akun Login Staf</p>
-                    <input type="email" id="m-email" placeholder="Email Staf" required class="w-full border rounded p-2 mb-2">
+                    <p class="text-sm font-medium text-gray-700 mb-2">Akun Login TU</p>
+                    <input type="email" id="m-email" placeholder="Email TU" required class="w-full border rounded p-2 mb-2">
                     <input type="password" id="m-password" placeholder="Password" required class="w-full border rounded p-2 mb-2">
                 </div>
             ` : ''}
@@ -796,17 +821,19 @@ async function handleCrudSubmit(e) {
         if (isEdit) {
             const data = window.appData['guru'][id];
             payload.email = data.email;
+            if(data.password) payload.password = data.password;
         }
     } else if (type === 'staf') {
         payload = {
             nama: document.getElementById('m-nama').value,
-            jabatan: document.getElementById('m-jabatan').value,
+            jabatan: "TU", // default for backward compatibility
             honorHarian: parseInt(document.getElementById('m-honor').value),
             status: document.getElementById('m-status').value
         };
         if (isEdit) {
             const data = window.appData['staf'][id];
             payload.email = data.email;
+            if(data.password) payload.password = data.password;
         }
     } else if (type === 'kelas') {
         const tingkat = document.getElementById('m-tingkat').value;
@@ -826,10 +853,8 @@ async function handleCrudSubmit(e) {
             const userCred = await createUserWithEmailAndPassword(secondaryAuth, gEmail, gPass);
             await signOut(secondaryAuth);
             
-            // Re-assign id to use Auth UID instead of generating one, so it's tied properly
-            // wait, we can just use the generated id or auth uid. Let's stick to generated id 
-            // and save email. The login logic checks email, so it's fine.
             payload.email = gEmail;
+            payload.password = gPass; // Save for Admin viewing
         }
         await set(ref(db, `${type}/${id}`), payload);
         writeLog(isEdit ? 'Edit ' + type : 'Tambah ' + type, `Menyimpan data ${type}: ${payload.nama || payload.namaKelas || payload.namaMapel}`);
@@ -851,11 +876,14 @@ function populateDropdowns() {
     if(document.getElementById('jadwal-filter-kelas')) document.getElementById('jadwal-filter-kelas').innerHTML = kOpts;
     if(document.getElementById('abs-kelas')) document.getElementById('abs-kelas').innerHTML = kOpts;
     if(document.getElementById('rs-kelas')) document.getElementById('rs-kelas').innerHTML = kOpts;
+    if(document.getElementById('ah-kelas')) document.getElementById('ah-kelas').innerHTML = kOpts;
 
     const mOpts = '<option value="all">Semua Pelajaran</option>' + Object.keys(window.appData.mapel).map(k => `<option value="${k}">${window.appData.mapel[k].namaMapel}</option>`).join('');
     if(document.getElementById('rs-mapel')) document.getElementById('rs-mapel').innerHTML = mOpts;
 
-    const gOpts = '<option value="all">Semua Guru</option>' + Object.keys(window.appData.guru).map(k => `<option value="${k}">${window.appData.guru[k].nama}</option>`).join('');
+    const gOpts = '<option value="all">Semua Guru & TU</option>' + 
+        Object.keys(window.appData.guru || {}).map(k => `<option value="${k}">${window.appData.guru[k].nama} (Guru)</option>`).join('') +
+        Object.keys(window.appData.staf || {}).map(k => `<option value="${k}">${window.appData.staf[k].nama} (TU)</option>`).join('');
     if(document.getElementById('rg-guru')) document.getElementById('rg-guru').innerHTML = gOpts;
 
     const gpOpts = '<option value="">-- Pilih Guru Pengganti --</option>' + Object.keys(window.appData.guru).map(k => `<option value="${k}">${window.appData.guru[k].nama}</option>`).join('');
@@ -1281,11 +1309,14 @@ async function loadRekapGuru() {
     const bulan = document.getElementById('rg-bulan').value;
     const guruIdFilter = document.getElementById('rg-guru').value;
     const tbody = document.getElementById('rg-body');
+    const rtuBody = document.getElementById('rtu-body');
 
     if(!bulan) return;
 
     tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</td></tr>';
+    if(rtuBody) rtuBody.innerHTML = '<tr><td colspan="4" class="text-center py-4"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</td></tr>';
 
+    // --- REKAP GURU ---
     const snap = await get(ref(db, `rekapGuruBulanan/${bulan}`));
     let html = '';
     
@@ -1295,10 +1326,12 @@ async function loadRekapGuru() {
         let list = [];
         for (const gId in data) {
             if (guruIdFilter === 'all' || guruIdFilter === gId) {
-                list.push({
-                    nama: window.appData.guru[gId]?.nama || 'Unknown',
-                    ...data[gId]
-                });
+                if (window.appData.guru[gId]) {
+                    list.push({
+                        nama: window.appData.guru[gId].nama,
+                        ...data[gId]
+                    });
+                }
             }
         }
 
@@ -1311,26 +1344,78 @@ async function loadRekapGuru() {
                     <td class="px-4 py-2 text-center text-teal-700 font-bold">${item.jumlahMengajar}</td>
                     <td class="px-4 py-2 text-center text-blue-600 font-bold">${item.jumlahSebagaiPengganti}</td>
                     <td class="px-4 py-2 text-center text-red-500 font-bold">${item.jumlahTidakHadir}</td>
-                    <td class="px-4 py-2 text-right">Rp ${item.honorPerSesi.toLocaleString('id-ID')}</td>
-                    <td class="px-4 py-2 text-right font-bold text-gray-800">Rp ${item.totalGaji.toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-2 text-right">Rp ${(item.honorPerSesi || 0).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-2 text-right font-bold text-gray-800">Rp ${(item.totalGaji || 0).toLocaleString('id-ID')}</td>
                 </tr>
             `;
         });
     }
 
-    if(!html) html = '<tr><td colspan="6" class="text-center py-4 text-gray-500">Tidak ada data rekap ditemukan.</td></tr>';
+    if(!html) html = '<tr><td colspan="6" class="text-center py-4 text-gray-500">Tidak ada data rekap guru ditemukan.</td></tr>';
     tbody.innerHTML = html;
+
+    // --- REKAP TU ---
+    if(rtuBody) {
+        const snapStaf = await get(ref(db, `absensiStaf/${bulan}`));
+        let htmlStaf = '';
+        
+        if(snapStaf.exists()) {
+            const dataStaf = snapStaf.val();
+            let listStaf = [];
+            
+            for (const sId in window.appData.staf) {
+                if (guruIdFilter === 'all' || guruIdFilter === sId) {
+                    const stafInfo = window.appData.staf[sId];
+                    if (stafInfo.status !== 'aktif') continue;
+                    
+                    const hariHadir = dataStaf[sId] ? Object.keys(dataStaf[sId]).length : 0;
+                    const honorHari = stafInfo.honorHarian || 0;
+                    const totalGaji = hariHadir * honorHari;
+                    
+                    listStaf.push({
+                        nama: stafInfo.nama,
+                        hariHadir: hariHadir,
+                        honorHari: honorHari,
+                        totalGaji: totalGaji
+                    });
+                }
+            }
+            
+            listStaf.sort((a,b) => a.nama.localeCompare(b.nama));
+            
+            listStaf.forEach(item => {
+                htmlStaf += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-2">${item.nama}</td>
+                        <td class="px-4 py-2 text-center text-green-600 font-bold">${item.hariHadir}</td>
+                        <td class="px-4 py-2 text-right">Rp ${item.honorHari.toLocaleString('id-ID')}</td>
+                        <td class="px-4 py-2 text-right font-bold text-teal-700">Rp ${item.totalGaji.toLocaleString('id-ID')}</td>
+                    </tr>
+                `;
+            });
+        }
+        
+        if(!htmlStaf) htmlStaf = '<tr><td colspan="4" class="text-center py-4 text-gray-500">Tidak ada data rekap TU ditemukan.</td></tr>';
+        rtuBody.innerHTML = htmlStaf;
+    }
 }
 
 function exportRekapGuru(type) {
+    const bulan = document.getElementById('rg-bulan').value;
     if(type === 'pdf') {
         const doc = new window.jspdf.jsPDF();
         doc.text("Rekap Guru dan Gaji", 14, 15);
         doc.autoTable({ html: '#table-rekap-guru', startY: 20 });
-        doc.save(`Rekap_Guru_${document.getElementById('rg-bulan').value}.pdf`);
+        doc.text("Rekap Tata Usaha (TU)", 14, doc.lastAutoTable.finalY + 10);
+        doc.autoTable({ html: '#table-rekap-tu', startY: doc.lastAutoTable.finalY + 15 });
+        doc.save(`Rekap_Guru_TU_${bulan}.pdf`);
     } else {
-        const wb = XLSX.utils.table_to_book(document.getElementById('table-rekap-guru'), {sheet:"Rekap"});
-        XLSX.writeFile(wb, `Rekap_Guru_${document.getElementById('rg-bulan').value}.xlsx`);
+        const wb = XLSX.utils.book_new();
+        const wsGuru = XLSX.utils.table_to_sheet(document.getElementById('table-rekap-guru'));
+        XLSX.utils.book_append_sheet(wb, wsGuru, "Rekap Guru");
+        const wsTU = XLSX.utils.table_to_sheet(document.getElementById('table-rekap-tu'));
+        XLSX.utils.book_append_sheet(wb, wsTU, "Rekap TU");
+        XLSX.writeFile(wb, `Rekap_Guru_TU_${bulan}.xlsx`);
     }
 }
 
@@ -1662,4 +1747,207 @@ window.lanjutKlaimKelas = async function() {
             }, 500);
         });
     }, 500);
+}
+
+// === ABSENSI HARIAN KELAS (TU) ===
+let activeAbsensiHarianTUData = null;
+
+async function checkAbsensiHarianTU() {
+    const tanggal = document.getElementById('ah-tanggal').value;
+    const kelasId = document.getElementById('ah-kelas').value;
+    const siswaArea = document.getElementById('ah-siswa-area');
+    const btnHapus = document.getElementById('ah-btn-hapus');
+
+    if (!tanggal || !kelasId) {
+        siswaArea.classList.add('hidden');
+        return;
+    }
+
+    const absRef = ref(db, `absensiHarianTU/${tanggal}/${kelasId}`);
+    const snapshot = await get(absRef);
+    
+    let isEditing = false;
+    activeAbsensiHarianTUData = null;
+
+    if (snapshot.exists()) {
+        isEditing = true;
+        activeAbsensiHarianTUData = snapshot.val();
+        btnHapus.classList.remove('hidden');
+    } else {
+        btnHapus.classList.add('hidden');
+    }
+
+    const tbody = document.getElementById('ah-siswa-list');
+    let rows = '';
+    
+    const siswaInClass = Object.keys(window.appData.siswa)
+        .map(k => ({id:k, ...window.appData.siswa[k]}))
+        .filter(s => s.kelasId === kelasId && s.status === 'aktif')
+        .sort((a,b) => a.nama.localeCompare(b.nama));
+
+    siswaInClass.forEach(s => {
+        const val = isEditing ? (activeAbsensiHarianTUData.siswa[s.id] || 'H') : 'H';
+        const colors = {H:'bg-green-100', S:'bg-yellow-100', I:'bg-blue-100', A:'bg-red-100'};
+        
+        rows += `
+            <tr class="hover:bg-gray-50">
+                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">${s.nama}</td>
+                <td class="px-4 py-2 text-center">
+                    <select id="ah-s-${s.id}" onchange="this.className='w-20 text-center border rounded p-1 text-xs font-bold focus:outline-none ' + (${JSON.stringify(colors)})[this.value]" class="w-20 text-center border rounded p-1 text-xs font-bold focus:outline-none ${colors[val]}">
+                        <option value="H" ${val==='H'?'selected':''}>H - Hadir</option>
+                        <option value="S" ${val==='S'?'selected':''}>S - Sakit</option>
+                        <option value="I" ${val==='I'?'selected':''}>I - Izin</option>
+                        <option value="A" ${val==='A'?'selected':''}>A - Alfa</option>
+                    </select>
+                </td>
+            </tr>
+        `;
+    });
+
+    tbody.innerHTML = rows;
+    siswaArea.classList.remove('hidden');
+}
+
+function setAllHadirTU() {
+    document.querySelectorAll('select[id^="ah-s-"]').forEach(el => {
+        el.value = 'H';
+        el.className = 'w-20 text-center border rounded p-1 text-xs font-bold focus:outline-none bg-green-100';
+    });
+}
+
+async function simpanAbsensiHarianTU() {
+    const tanggal = document.getElementById('ah-tanggal').value;
+    const kelasId = document.getElementById('ah-kelas').value;
+
+    if(!tanggal || !kelasId) return Swal.fire('Error', 'Lengkapi tanggal dan kelas', 'error');
+
+    const siswaData = {};
+    document.querySelectorAll('select[id^="ah-s-"]').forEach(el => {
+        const sId = el.id.replace('ah-s-', '');
+        siswaData[sId] = el.value;
+    });
+
+    const payload = {
+        tanggal: tanggal,
+        kelasId: kelasId,
+        diinputOleh: window.currentUser.uid,
+        waktuInput: Date.now(),
+        siswa: siswaData
+    };
+
+    showLoading();
+    try {
+        await set(ref(db, `absensiHarianTU/${tanggal}/${kelasId}`), payload);
+        writeLog('Input Absensi TU', `Input absensi harian kelas ${window.appData.kelas[kelasId].namaKelas} tgl ${tanggal}`);
+        Swal.fire('Berhasil', 'Data absensi harian tersimpan', 'success');
+        checkAbsensiHarianTU();
+    } catch (error) {
+        Swal.fire('Error', error.message, 'error');
+    }
+}
+
+async function hapusAbsensiHarianTU() {
+    if(!activeAbsensiHarianTUData) return;
+    
+    Swal.fire({
+        title: 'Hapus Data?',
+        text: 'Data absensi harian kelas ini akan dihapus.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Ya, Hapus'
+    }).then(async (result) => {
+        if(result.isConfirmed) {
+            showLoading();
+            try {
+                await remove(ref(db, `absensiHarianTU/${activeAbsensiHarianTUData.tanggal}/${activeAbsensiHarianTUData.kelasId}`));
+                writeLog('Hapus Absensi TU', `Hapus absensi harian tgl ${activeAbsensiHarianTUData.tanggal} kelas ${activeAbsensiHarianTUData.kelasId}`);
+                Swal.fire('Terhapus', 'Absensi harian dihapus', 'success');
+                checkAbsensiHarianTU();
+            } catch (e) {
+                Swal.fire('Error', e.message, 'error');
+            }
+        }
+    });
+}
+
+// === LAPORAN YAYASAN ===
+async function loadLaporanYayasan() {
+    const startDate = document.getElementById('ly-start-date').value;
+    const endDate = document.getElementById('ly-end-date').value;
+    const tbody = document.getElementById('ly-body');
+
+    if (!startDate || !endDate) return Swal.fire('Info', 'Dari dan Sampai Tanggal wajib diisi', 'info');
+    if (new Date(startDate) > new Date(endDate)) return Swal.fire('Error', 'Tanggal mulai tidak boleh lebih besar dari tanggal akhir', 'error');
+
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</td></tr>';
+
+    const snap = await get(ref(db, 'absensiHarianTU'));
+    let html = '';
+    
+    if (snap.exists()) {
+        const data = snap.val();
+        const rekapSiswa = {};
+
+        for (const tgl in data) {
+            if (tgl >= startDate && tgl <= endDate) {
+                for (const kelasId in data[tgl]) {
+                    const absenKelas = data[tgl][kelasId].siswa;
+                    for (const sId in absenKelas) {
+                        if (!rekapSiswa[sId]) {
+                            rekapSiswa[sId] = { H:0, S:0, I:0, A:0, kelasId: kelasId };
+                        }
+                        const status = absenKelas[sId];
+                        if (rekapSiswa[sId][status] !== undefined) {
+                            rekapSiswa[sId][status]++;
+                        }
+                    }
+                }
+            }
+        }
+
+        let list = [];
+        for (const sId in rekapSiswa) {
+            const siswaObj = window.appData.siswa[sId];
+            if (!siswaObj) continue;
+
+            list.push({
+                nama: siswaObj.nama,
+                kelas: window.appData.kelas[rekapSiswa[sId].kelasId]?.namaKelas || '-',
+                rekap: rekapSiswa[sId]
+            });
+        }
+
+        list.sort((a,b) => a.kelas.localeCompare(b.kelas) || a.nama.localeCompare(b.nama));
+
+        list.forEach(item => {
+            html += `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2">${item.nama}</td>
+                    <td class="px-4 py-2">${item.kelas}</td>
+                    <td class="px-4 py-2 text-center text-green-600 font-bold">${item.rekap.H}</td>
+                    <td class="px-4 py-2 text-center text-yellow-500 font-bold">${item.rekap.S}</td>
+                    <td class="px-4 py-2 text-center text-blue-500 font-bold">${item.rekap.I}</td>
+                    <td class="px-4 py-2 text-center text-red-500 font-bold">${item.rekap.A}</td>
+                </tr>
+            `;
+        });
+    }
+
+    if (!html) html = '<tr><td colspan="6" class="text-center py-4 text-gray-500">Tidak ada data rekap ditemukan di rentang tanggal tersebut.</td></tr>';
+    tbody.innerHTML = html;
+}
+
+function exportLaporanYayasan(type) {
+    const sDate = document.getElementById('ly-start-date').value;
+    const eDate = document.getElementById('ly-end-date').value;
+    if(type === 'pdf') {
+        const doc = new window.jspdf.jsPDF();
+        doc.text(`Laporan Absensi Yayasan (${sDate} s/d ${eDate})`, 14, 15);
+        doc.autoTable({ html: '#table-laporan-yayasan', startY: 20 });
+        doc.save(`Laporan_Yayasan_${sDate}_${eDate}.pdf`);
+    } else {
+        const wb = XLSX.utils.table_to_book(document.getElementById('table-laporan-yayasan'), {sheet:"Laporan Yayasan"});
+        XLSX.writeFile(wb, `Laporan_Yayasan_${sDate}_${eDate}.xlsx`);
+    }
 }
